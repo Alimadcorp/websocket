@@ -1,6 +1,7 @@
 // index.js
+const port = 8392;
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 3001 });
+const wss = new WebSocket.Server({ port });
 const channels = new Map(); // channel -> Set(ws)
 const clients = new Map(); // ws -> { ip, subscriptions: Set }
 
@@ -103,4 +104,4 @@ wss.on('connection', (ws, req) => {
   ws.send(JSON.stringify({ type: 'welcome', ip }));
 });
 
-console.log('WebSocket broadcast server listening on ws://127.0.0.1:8080');
+console.log('WebSocket broadcast server listening on ws://127.0.0.1:'+port);

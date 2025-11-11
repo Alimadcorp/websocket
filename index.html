@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WS Broadcast Client</title>
+<style>
+  :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;line-height:1.4}
+  body{background:#0b1020;color:#e6eef8;margin:0;display:flex;align-items:center;justify-content:center;height:100vh}
+  .card{width:920px;max-width:96vw;background:#071026;border-radius:12px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+  header{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+  input,button,select,textarea{background:#071726;color:#e6eef8;border:1px solid #133344;padding:8px;border-radius:8px;font:inherit}
+  .grow{flex:1}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .cols{display:grid;grid-template-columns:1fr 360px;gap:12px}
+  .log{height:48vh;overflow:auto;padding:8px;background:#04121a;border-radius:8px;border:1px solid #0b3444;font-size:13px}
+  .mini{font-size:12px;color:#9fb3c4}
+  .btn{cursor:pointer}
+  .row{display:flex;gap:8px;align-items:center}
+  .bad{color:#ff6b6b}
+  .chip{background:#092535;padding:4px 8px;border-radius:999px;border:1px solid #0f6b86;font-size:12px}
+</style>
+</head>
+<body>
+<div class="card" role="main">
+  <header>
+    <h2 style="margin:0">WS Broadcast Client</h2>
+    <div class="mini" style="margin-left:auto">Connecting to <span class="chip">wss://ws.alimad.hackclub.app</span></div>
+  </header>
+  <div class="controls">
+    <input id="url" class="grow" value="wss://ws.alimad.hackclub.app" />
+    <button id="connect" class="btn">Connect</button>
+    <button id="disconnect" class="btn" disabled>Disconnect</button>
+    <div id="status" class="mini">● disconnected</div>
+  </div>
+  <div class="cols">
+    <div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="channels" placeholder='channels: single or JSON array e.g. ["room1","room2"]' />
+        <button id="doConnect" class="btn">connect (join)</button>
+        <button id="subscribe" class="btn">subscribe</button>
+        <button id="unsubscribe" class="btn">unsubscribe</button>
+        <button id="unsubAll" class="btn">unsubscribe all</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="message" placeholder="message to broadcast" class="grow" />
+        <input id="msgChannels" placeholder='target channels (optional)' style="width:220px" />
+        <button id="broadcast" class="btn">broadcast</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <textarea id="raw" placeholder='raw JSON to send (optional)' style="height:90px;width:100%"></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="sendRaw" class="btn">send raw</button>
+        <div class="mini" style="margin-left:auto">Subscribed: <span id="subs" class="chip">none</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="log" id="log" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+<script>
+  const urlEl = document.getElementById('url');
+  const connectBtn = document.getElementById('connect');
+  const disconnectBtn = document.getElementById('disconnect');
+  const status = document.getElementById('status');
+  const logEl = document.getElementById('log');
+  const channelsEl = document.getElementById('channels');
+  const doConnectBtn = document.getElementById('doConnect');
+  const subscribeBtn = document.getElementById('subscribe');
+  const unsubscribeBtn = document.getElementById('unsubscribe');
+  const unsubAllBtn = document.getElementById('unsubAll');
+  const messageEl = document.getElementById('message');
+  const msgChannelsEl = document.getElementById('msgChannels');
+  const broadcastBtn = document.getElementById('broadcast');
+  const rawEl = document.getElementById('raw');
+  const sendRawBtn = document.getElementById('sendRaw');
+  const subsChip = document.getElementById('subs');
+
+  let ws = null;
+  let subscriptions = new Set();
+
+  function log(v, cls='') {
+    const t = new Date().toLocaleTimeString();
+    const el = document.createElement('div');
+    el.innerHTML = `<span class="mini">[${t}]</span> ${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : v)}`;
+    if (cls) el.classList.add(cls);
+    logEl.appendChild(el);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function escapeHtml(s){ return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+  function setStatus(connected){
+    status.textContent = connected ? '● connected' : '● disconnected';
+    status.style.color = connected ? '#79ffb2' : '#ff9b9b';
+    connectBtn.disabled = connected;
+    disconnectBtn.disabled = !connected;
+  }
+
+  function parseChannelsField(value){
+    if (!value) return [];
+    value = value.trim();
+    if (value.startsWith('[')) try { return JSON.parse(value); } catch(e){ return [value]; }
+    try { const arr = JSON.parse(value); if (Array.isArray(arr)) return arr; } catch(e){}
+    return [value];
+  }
+
+  function send(obj){
+    if (!ws || ws.readyState !== WebSocket.OPEN) { log('not connected', 'bad'); return; }
+    ws.send(JSON.stringify(obj));
+    log({ out: obj });
+  }
+
+  connectBtn.onclick = ()=>{
+    ws = new WebSocket(urlEl.value);
+    ws.onopen = ()=>{ setStatus(true); log('connected'); }
+    ws.onclose = ()=>{ setStatus(false); log('disconnected'); subscriptions.clear(); updateSubs(); }
+    ws.onerror = e=>{ log('error'); }
+    ws.onmessage = ev=>{
+      let d;
+      try { d = JSON.parse(ev.data); } catch(e){ d = ev.data; }
+      log({ in: d });
+      if (d && d.type === 'connected' && Array.isArray(d.subscribed)) { d.subscribed.forEach(s=>subscriptions.add(s)); updateSubs(); }
+      if (d && d.type === 'subscribed' && Array.isArray(d.subscribed)) { subscriptions = new Set(d.subscribed); updateSubs(); }
+      if (d && d.type === 'unsubscribed' && Array.isArray(d.subscribed)) { subscriptions = new Set(d.subscribed); updateSubs(); }
+    };
+  };
+
+  disconnectBtn.onclick = ()=>{ if(ws) ws.close(); ws = null; setStatus(false); };
+
+  doConnectBtn.onclick = ()=>{
+    const chs = parseChannelsField(channelsEl.value);
+    if (!chs.length) return log('no channels specified','bad');
+    send({ type: 'connect', channel: chs.length===1?chs[0]:JSON.stringify(chs) });
+  };
+
+  subscribeBtn.onclick = ()=>{ const chs=parseChannelsField(channelsEl.value); chs.forEach(c=>subscriptions.add(c)); updateSubs(); send({ type:'subscribe', channel: chs.length===1?chs[0]:JSON.stringify(chs) }); };
+
+  unsubscribeBtn.onclick = ()=>{ const chs=parseChannelsField(channelsEl.value); chs.forEach(c=>subscriptions.delete(c)); updateSubs(); send({ type:'unsubscribe', channel: chs.length===1?chs[0]:JSON.stringify(chs) }); };
+
+  unsubAllBtn.onclick = ()=>{ subscriptions.clear(); updateSubs(); send({ type:'unsubscribeAll' }); };
+
+  broadcastBtn.onclick = ()=>{ const data = messageEl.value; const chField = msgChannelsEl.value.trim()||channelsEl.value.trim(); const payload = { type:'broadcast', data }; if (chField) payload.channel = chField; send(payload); };
+
+  sendRawBtn.onclick = ()=>{ try{ const obj = JSON.parse(rawEl.value); send(obj); }catch(e){ log('invalid JSON in raw box','bad'); } };
+
+  function updateSubs(){ subsChip.textContent = subscriptions.size? [...subscriptions].join(', '):'none'; }
+
+  document.addEventListener('keydown', e=>{ if (e.key==='Enter' && e.ctrlKey) broadcastBtn.click(); });
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 // index.js
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8080 });
+const wss = new WebSocket.Server({ port: 3001 });
 const channels = new Map(); // channel -> Set(ws)
 const clients = new Map(); // ws -> { ip, subscriptions: Set }
 

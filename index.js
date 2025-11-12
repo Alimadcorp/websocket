@@ -44,7 +44,7 @@ function broadcast(fromWs, chNames, payload) {
     const set = channels.get(ch);
     if (!set) continue;
     for (const ws of set) {
-      if (ws.readyState !== WebSocket.OPEN || sent.has(ws)) continue;
+      if (ws.readyState !== WebSocket.OPEN || sent.has(ws) || ws === fromWs) continue;
       sent.add(ws);
       ws.send(JSON.stringify({
         type: 'broadcast',

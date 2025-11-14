@@ -80,7 +80,9 @@ wss.on('connection', (ws, req) => {
     }
     const t = m.type;
     if (t === 'ping') {
-      return ws.send(JSON.stringify({ type: 'pong', time: (new Date()).toISOString() }));
+      let r = { type: 'pong', time: (new Date()).toISOString() };
+      if(m.id) r.id = m.id;
+      return ws.send(JSON.stringify(r));
     }
     if (t === 'connect') {
       const chs = parseChannels(m.channel);

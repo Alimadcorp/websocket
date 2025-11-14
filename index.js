@@ -4,6 +4,7 @@ const port = 8392;
 const wss = new WebSocket.Server({ port });
 const channels = new Map();
 const clients = new Map();
+const LOG = false;
 
 function clientIP(req) {
   const h = req.headers['x-forwarded-for'];
@@ -57,6 +58,7 @@ function broadcast(fromWs, chNames, payload) {
 }
 
 function logEvent(...args) {
+  if(!LOG) return;
   console.log(new Date().toISOString(), '-', ...args);
 }
 
@@ -77,6 +79,9 @@ wss.on('connection', (ws, req) => {
       return ws.send(JSON.stringify({ type: 'error', reason: 'invalid-json' }));
     }
     const t = m.type;
+    if (t === 'ping') {
+      return ws.send(JSON.stringify({ type: 'pong', time: (new Date()).toISOString() }));
+    }
     if (t === 'connect') {
       const chs = parseChannels(m.channel);
       chs.forEach(ch => subscribe(ws, ch));
@@ -118,7 +123,6 @@ wss.on('connection', (ws, req) => {
   ws.send(JSON.stringify({ type: 'welcome', ip }));
 });
 
-// ping clients every 30s to detect dead connections
 const interval = setInterval(() => {
   for (const [ws, info] of clients.entries()) {
     if (!info.isAlive) {
@@ -133,4 +137,4 @@ const interval = setInterval(() => {
 }, 30000);
 
 wss.on('close', () => clearInterval(interval));
-console.log('WebSocket broadcast server ready on ws://127.0.0.1:' + port);
+console.log('WebSocket broadcast server ready on port ' + port);

@@ -1,5 +1,5 @@
 // index.js
-const WebSocket = require('ws');
+const WebSocket = require("ws");
 const port = 8392;
 const wss = new WebSocket.Server({ port });
 const channels = new Map();
@@ -7,8 +7,8 @@ const clients = new Map();
 const LOG = false;
 
 function clientIP(req) {
-  const h = req.headers['x-forwarded-for'];
-  if (h) return h.split(',')[0].trim();
+  const h = req.headers["x-forwarded-for"];
+  if (h) return h.split(",")[0].trim();
   return req.socket.remoteAddress;
 }
 
@@ -32,8 +32,12 @@ function unsubscribe(ws, name) {
 
 function parseChannels(chField) {
   if (!chField) return [];
-  if (typeof chField === 'string' && chField.trim().startsWith('[')) {
-    try { return JSON.parse(chField); } catch { return []; }
+  if (typeof chField === "string" && chField.trim().startsWith("[")) {
+    try {
+      return JSON.parse(chField);
+    } catch {
+      return [];
+    }
   }
   if (Array.isArray(chField)) return chField;
   return [String(chField)];
@@ -45,90 +49,146 @@ function broadcast(fromWs, chNames, payload) {
     const set = channels.get(ch);
     if (!set) continue;
     for (const ws of set) {
-      if (ws.readyState !== WebSocket.OPEN || sent.has(ws) || ws === fromWs) continue;
+      if (ws.readyState !== WebSocket.OPEN || sent.has(ws) || ws === fromWs)
+        continue;
       sent.add(ws);
-      ws.send(JSON.stringify({
-        type: 'broadcast',
-        from: clients.get(fromWs)?.ip,
-        channel: ch,
-        data: payload
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "broadcast",
+          from: clients.get(fromWs)?.ip,
+          channel: ch,
+          data: payload,
+        })
+      );
     }
   }
 }
 
 function logEvent(...args) {
-  if(!LOG) return;
-  console.log(new Date().toISOString(), '-', ...args);
+  if (!LOG) return;
+  console.log(new Date().toISOString(), "-", ...args);
 }
 
-wss.on('connection', (ws, req) => {
+const channelState = new Map(); // name -> {}
+function ensureChanState(name) {
+  if (!channelState.has(name)) channelState.set(name, {});
+  return channelState.get(name);
+}
+
+wss.on("connection", (ws, req) => {
   const ip = clientIP(req);
   clients.set(ws, { ip, subscriptions: new Set(), isAlive: true });
-  logEvent('Connected:', ip);
+  logEvent("Connected:", ip);
 
-  ws.on('pong', () => {
+  ws.on("pong", () => {
     const info = clients.get(ws);
     if (info) info.isAlive = true;
   });
 
-  ws.on('message', msg => {
-    logEvent('Received from', ip, ':', msg.toString());
+  ws.on("message", (msg) => {
+    logEvent("Received from", ip, ":", msg.toString());
     let m;
-    try { m = JSON.parse(msg); } catch {
-      return ws.send(JSON.stringify({ type: 'error', reason: 'invalid-json' }));
+    try {
+      m = JSON.parse(msg);
+    } catch {
+      return ws.send(JSON.stringify({ type: "error", reason: "invalid-json" }));
     }
     const t = m.type;
-    if (t === 'ping') {
-      let r = { type: 'pong', time: (new Date()).toISOString() };
-      if(m.id) r.id = m.id;
+    if (t === "ping") {
+      let r = { type: "pong", time: new Date().toISOString() };
+      if (m.id) r.id = m.id;
       return ws.send(JSON.stringify(r));
     }
-    if (t === 'connect') {
+    if (t === "connect") {
       const chs = parseChannels(m.channel);
-      chs.forEach(ch => subscribe(ws, ch));
-      return ws.send(JSON.stringify({ type: 'connected', subscribed: [...clients.get(ws).subscriptions] }));
+      chs.forEach((ch) => subscribe(ws, ch));
+      return ws.send(
+        JSON.stringify({
+          type: "connected",
+          subscribed: [...clients.get(ws).subscriptions],
+        })
+      );
     }
-    if (t === 'broadcast') {
+    if (t === "broadcast") {
       const chs = parseChannels(m.channel);
-      if (!chs.length) return ws.send(JSON.stringify({ type: 'error', reason: 'no-channel' }));
+      if (!chs.length)
+        return ws.send(JSON.stringify({ type: "error", reason: "no-channel" }));
       broadcast(ws, chs, m.data);
       return;
     }
-    if (t === 'subscribe') {
+    if (t === "subscribe") {
       const chs = parseChannels(m.channel);
-      chs.forEach(ch => subscribe(ws, ch));
-      return ws.send(JSON.stringify({ type: 'subscribed', subscribed: [...clients.get(ws).subscriptions] }));
+      chs.forEach((ch) => subscribe(ws, ch));
+      return ws.send(
+        JSON.stringify({
+          type: "subscribed",
+          subscribed: [...clients.get(ws).subscriptions],
+        })
+      );
     }
-    if (t === 'unsubscribe') {
+    if (t === "unsubscribe") {
       const chs = parseChannels(m.channel);
-      chs.forEach(ch => unsubscribe(ws, ch));
-      return ws.send(JSON.stringify({ type: 'unsubscribed', subscribed: [...clients.get(ws).subscriptions] }));
+      chs.forEach((ch) => unsubscribe(ws, ch));
+      return ws.send(
+        JSON.stringify({
+          type: "unsubscribed",
+          subscribed: [...clients.get(ws).subscriptions],
+        })
+      );
     }
-    if (t === 'unsubscribeAll' || t === 'unsubscribe_all') {
-      [...clients.get(ws).subscriptions].forEach(ch => unsubscribe(ws, ch));
-      return ws.send(JSON.stringify({ type: 'unsubscribedAll' }));
+    if (t === "unsubscribe.all") {
+      [...clients.get(ws).subscriptions].forEach((ch) => unsubscribe(ws, ch));
+      return ws.send(JSON.stringify({ type: "unsubscribed.all" }));
     }
-    ws.send(JSON.stringify({ type: 'error', reason: 'unknown-type' }));
+    if (t === "state") {
+      const chs = parseChannels(m.channel);
+      if (!chs.length) {
+        return ws.send(JSON.stringify({ type: "error", reason: "no-channel" }));
+      }
+      const mode = m.action; // add, remove, get
+      const result = {};
+      for (const ch of chs) {
+        const state = ensureChanState(ch);
+
+        if (mode === "add") {
+          const data =
+            typeof m.data === "object" && !Array.isArray(m.data) ? m.data : {};
+          Object.assign(state, data);
+          result[ch] = state;
+        } else if (mode === "remove") {
+          const arr = Array.isArray(m.data) ? m.data : [];
+          for (const key of arr) delete state[key];
+          result[ch] = state;
+        } else if (mode === "get") {
+          result[ch] = state;
+        } else {
+          return ws.send(
+            JSON.stringify({ type: "error", reason: "invalid-state-action" })
+          );
+        }
+      }
+      return ws.send(JSON.stringify({ type: "state", action: mode, result }));
+    }
+    ws.send(JSON.stringify({ type: "error", reason: "type-unknown" }));
   });
 
-  ws.on('close', () => {
+  ws.on("close", () => {
     const info = clients.get(ws);
     if (info) {
-      [...info.subscriptions].forEach(ch => unsubscribe(ws, ch));
+      [...info.subscriptions].forEach((ch) => unsubscribe(ws, ch));
       clients.delete(ws);
-      logEvent('Disconnected:', ip);
+      logEvent("Disconnected:", ip);
     }
   });
 
-  ws.on('error', err => logEvent('Error from', ip, err.message));
-  ws.send(JSON.stringify({ type: 'welcome', ip }));
+  ws.on("error", (err) => logEvent("Error from", ip, err.message));
+  ws.send(JSON.stringify({ type: "welcome", ip }));
 });
 
 const interval = setInterval(() => {
   for (const [ws, info] of clients.entries()) {
     if (!info.isAlive) {
-      logEvent('Terminating dead connection:', info.ip);
+      logEvent("Terminating dead connection:", info.ip);
       ws.terminate();
       clients.delete(ws);
       continue;
@@ -138,5 +198,5 @@ const interval = setInterval(() => {
   }
 }, 30000);
 
-wss.on('close', () => clearInterval(interval));
-console.log('WebSocket broadcast server ready on port ' + port);
+wss.on("close", () => clearInterval(interval));
+console.log("WebSocket broadcast server ready on port " + port);

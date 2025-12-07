@@ -43,6 +43,7 @@ function broadcast(fromWs, chNames, payload) {
 const wss = new WebSocket.Server({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
+  console.log("Raahhh");
   if (req.url === "/socket") {
     wss.handleUpgrade(req, socket, head, (ws) => handleProducer(ws, req));
   } else {
@@ -75,8 +76,7 @@ function handleProducer(ws, req) {
     if (ws.isProducer && ws.isAuthenticated) {
       if (msg.type === "sample" || msg.type === "aggregate") {
         const broadcastMsg = JSON.stringify({ type: msg.type, data: msg.data });
-        // Only broadcast to other producers (if multiple ever)
-        wss.clients.forEach((c) => { if (c !== ws && c.isProducer && c.readyState === WebSocket.OPEN) c.send(broadcastMsg); });
+        wss.clients.forEach((c) => { if (c !== ws && c.readyState === WebSocket.OPEN) c.send(broadcastMsg); });
       }
     }
   });

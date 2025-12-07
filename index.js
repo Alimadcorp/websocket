@@ -1,10 +1,72 @@
 // index.js
 const WebSocket = require("ws");
+const express = require("express");
+const http = require("http");
 const port = 8392;
 const wss = new WebSocket.Server({ port });
 const channels = new Map();
 const clients = new Map();
 const LOG = false;
+const PRODUCER_PASSWORD = "AlimadCo(10)";
+
+const app = express();
+const server = http.createServer(app);
+
+const wss2 = new WebSocket.Server({ noServer: true });
+let producerSocket = null;
+
+server.on("upgrade", (request, socket, head) => {
+  if (request.url === "/socket") {
+    wss2.handleUpgrade(request, socket, head, (ws) => {
+      wss2.emit("connection", ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+wss2.on("connection", (ws) => {
+  ws.isProducer = false;
+  ws.isAuthenticated = false;
+
+  ws.on("message", (msgRaw) => {
+    let msg;
+    try { msg = JSON.parse(msgRaw.toString("utf8")); } 
+    catch { return; }
+    console.log(msg)
+
+    if (msg.type === "auth") {
+      if (msg.password === PRODUCER_PASSWORD) {
+        ws.isProducer = true;
+        ws.isAuthenticated = true;
+        producerSocket = ws;
+        ws.send(JSON.stringify({ type: "auth_ok", device: msg.device || null }));
+        console.log("Producer authenticated:", msg.device || "unknown");
+        return;
+      } else {
+        ws.send(JSON.stringify({ type: "auth_failed" }));
+        ws.close();
+        return;
+      }
+    }
+
+    if (ws.isProducer && ws.isAuthenticated) {
+      if (msg.type === "sample" || msg.type === "aggregate") {
+        const broadcast = JSON.stringify({ type: msg.type, data: msg.data });
+        wss2.clients.forEach((c) => {
+          if (c !== ws && c.readyState === WebSocket.OPEN) c.send(broadcast);
+        });
+      }
+    }
+  });
+
+  ws.on("close", () => {
+    if (ws === producerSocket) {
+      producerSocket = null;
+      console.log("Producer disconnected");
+    }
+  });
+});
 
 function clientIP(req) {
   const h = req.headers["x-forwarded-for"];
@@ -199,4 +261,5 @@ const interval = setInterval(() => {
 }, 30000);
 
 wss.on("close", () => clearInterval(interval));
+server.listen(port, () => console.log("HTTP/WebSocket server listening on " + port));
 console.log("WebSocket broadcast server ready on port " + port);

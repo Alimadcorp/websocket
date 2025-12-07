@@ -45,8 +45,10 @@ const wss = new WebSocket.Server({ noServer: true });
 server.on("upgrade", (req, socket, head) => {
   console.log(req.url);
   if (req.url === "/socket") {
+    console.log("Producer");
     wss.handleUpgrade(req, socket, head, (ws) => handleProducer(ws, req));
   } else {
+    console.log("Client");
     wss.handleUpgrade(req, socket, head, (ws) => handleClient(ws, req));
   }
 });

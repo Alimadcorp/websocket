@@ -43,7 +43,7 @@ function broadcast(fromWs, chNames, payload) {
 const wss = new WebSocket.Server({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
-  console.log("Raahhh");
+  console.log(req.url);
   if (req.url === "/socket") {
     wss.handleUpgrade(req, socket, head, (ws) => handleProducer(ws, req));
   } else {

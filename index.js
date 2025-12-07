@@ -9,13 +9,11 @@ const PRODUCER_PASSWORD = "AlimadCo(10)";
 const app = express();
 const server = http.createServer(app);
 
-// Global state
 const channels = new Map();
 const clients = new Map();
 const channelState = new Map(); // name -> {}
 let producerSocket = null;
 
-// --- Utils ---
 function logEvent(...args) { if (LOG) console.log(new Date().toISOString(), "-", ...args); }
 function clientIP(req) { return (req.headers["x-forwarded-for"]?.split(",")[0].trim()) || req.socket.remoteAddress; }
 function ensureChan(name) { if (!channels.has(name)) channels.set(name, new Set()); return channels.get(name); }
@@ -42,11 +40,9 @@ function broadcast(fromWs, chNames, payload) {
   }
 }
 
-// --- Single WebSocket Server ---
 const wss = new WebSocket.Server({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
-  // Decide which "socket type" based on path
   if (req.url === "/socket") {
     wss.handleUpgrade(req, socket, head, (ws) => handleProducer(ws, req));
   } else {
@@ -54,7 +50,6 @@ server.on("upgrade", (req, socket, head) => {
   }
 });
 
-// --- Producer Socket Logic ---
 function handleProducer(ws, req) {
   ws.isProducer = false;
   ws.isAuthenticated = false;
@@ -93,7 +88,6 @@ function handleProducer(ws, req) {
   ws.send(JSON.stringify({ type: "welcome", role: "producer" }));
 }
 
-// --- Client Socket Logic ---
 function handleClient(ws, req) {
   const ip = clientIP(req);
   clients.set(ws, { ip, subscriptions: new Set(), isAlive: true });
@@ -132,7 +126,6 @@ function handleClient(ws, req) {
   ws.send(JSON.stringify({ type: "welcome", role: "client", ip }));
 }
 
-// --- Heartbeat ---
 const interval = setInterval(() => {
   for (const [ws, info] of clients.entries()) {
     if (!info.isAlive) { logEvent("Terminating dead connection:", info.ip); ws.terminate(); clients.delete(ws); continue; }

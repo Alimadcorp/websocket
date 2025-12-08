@@ -4,7 +4,7 @@ const http = require("http");
 
 const port = 8392;
 const LOG = false;
-const PRODUCER_PASSWORD = "AlimadCo(10)";
+const PRODUCER_PASSWORD = process.env.LOG_PASSWORD;
 
 const app = express();
 const server = http.createServer(app);

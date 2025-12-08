@@ -56,6 +56,7 @@ server.on("upgrade", (req, socket, head) => {
 function handleProducer(ws, req) {
   ws.isProducer = false;
   ws.isAuthenticated = false;
+  const ip = clientIP(req);
 
   ws.on("message", (msgRaw) => {
     let msg;
@@ -77,6 +78,7 @@ function handleProducer(ws, req) {
 
     if (ws.isProducer && ws.isAuthenticated) {
       if (msg.type === "sample" || msg.type === "aggregate") {
+        msg.data.ip = ip;
         const broadcastMsg = JSON.stringify({ type: msg.type, data: msg.data });
         wss.clients.forEach((c) => { if (c !== ws && c.readyState === WebSocket.OPEN) c.send(broadcastMsg); });
       }

@@ -152,29 +152,35 @@ function handleProducer(ws, req) {
     }
 
     if (ws.isProducer && ws.isAuthenticated) {
-      if (msg.type === "sample" || msg.type === "aggregate") {
+      if (
+        msg.type === "screenshot" ||
+        msg.type === "sample" ||
+        msg.type === "aggregate"
+      ) {
         msg.data.ip = ip;
         msg.data.device = ws.device;
-        if (msg.data.icon && msg.data.icon.trim() && msg.data.icon != "none") {
+
+        if (msg.data.icon && msg.data.icon.trim() && msg.data.icon !== "none") {
           lastIcon[ws.device] = msg.data.icon;
         }
 
         const broadcastMsg = { type: msg.type, data: { ...msg.data } };
-        let la = broadcastMsg.data;
-        la.timestamp = new Date();
-        lastActivity[ws.device] = la;
+        broadcastMsg.data.timestamp = new Date();
+        lastActivity[ws.device] = broadcastMsg.data;
 
         wss.clients.forEach((c) => {
           if (c !== ws && c.readyState === WebSocket.OPEN) {
-            if (!c.synced) {
-              broadcastMsg.data.icon = lastIcon[ws.device];
-              broadcastMsg.synced = true;
-              broadcastMsg.online = producerSocket;
-              c.synced = true;
-            } else {
-              delete broadcastMsg.data.icon;
+            if (!c.isAuthenticated) {
+              if (!c.synced) {
+                broadcastMsg.data.icon = lastIcon[ws.device];
+                broadcastMsg.synced = true;
+                broadcastMsg.online = producerSocket;
+                c.synced = true;
+              } else {
+                delete broadcastMsg.data.icon;
+              }
+              c.send(JSON.stringify(broadcastMsg));
             }
-            c.send(JSON.stringify(broadcastMsg));
           }
         });
       }

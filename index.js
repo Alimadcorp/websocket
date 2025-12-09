@@ -100,7 +100,7 @@ function handleProducer(ws, req) {
   const ip = clientIP(req).replaceAll('"', "");
   actConnected.push(ip);
   ws.ipA = ip;
-  ws.send({ type: "init", devices: producerSocket, data: lastActivity });
+  ws.send(JSON.stringify({ type: "init", devices: producerSocket, data: lastActivity }));
   wss.clients.forEach((c) => {
     if (c.produceSub && c.readyState === WebSocket.OPEN) {
       c.send(JSON.stringify({ type: "new", clients: actConnected }));

@@ -8,7 +8,7 @@ const PRODUCER_PASSWORD = process.env.LOG_PASSWORD || "AlimadCo(10)";
 
 const app = express();
 const server = http.createServer(app);
-let lastIcon = "";
+let lastIcon = {};
 let lastActivity = {};
 
 const channels = new Map();
@@ -96,7 +96,11 @@ function handleProducer(ws, req) {
   ws.produceSub = true;
   ws.synced = false;
   ws.device = "";
-  const ip = clientIP(req);
+  const ip = clientIP(req).replaceAll('"', "");
+
+  ws.on("open", (e) => {
+    ws.send({ type: "init", devices: producerSocket });
+  });
 
   ws.on("message", (msgRaw) => {
     let msg;
@@ -133,13 +137,19 @@ function handleProducer(ws, req) {
           msg.data.icon.trim() != "" &&
           msg.data.icon != "none"
         )
-          lastIcon = msg.data.icon;
+          lastIcon[ws.device] = msg.data.icon;
         const broadcastMsg = { type: msg.type, data: msg.data };
+        let la = broadcastMsg.data;
+        la.icon = lastIcon[ws.device];
+        la.timestamp = new Date();
+        lastActivity[ws.device] = la;
         wss.clients.forEach((c) => {
           if (c !== ws && c.produceSub && c.readyState === WebSocket.OPEN) {
-            if(!c.synced){
-              broadcastMsg.data.icon = broadcastMsg.data.icon || lastIcon;
+            if (!c.synced) {
+              broadcastMsg.data.icon =
+                broadcastMsg.data.icon || lastIcon[ws.device];
               broadcastMsg.synced = true;
+              broadcastMsg.online = producerSocket;
               c.synced = true;
             }
             c.send(JSON.stringify(broadcastMsg));
@@ -155,6 +165,17 @@ function handleProducer(ws, req) {
     if (producerSocket.includes(ws.device)) {
       producerSocket = producerSocket.filter((e) => e != ws.device);
       console.log("Producer disconnected " + ws.device);
+      wss.clients.forEach((c) => {
+        if (c.produceSub && c.readyState === WebSocket.OPEN) {
+          c.send(
+            JSON.stringify({
+              type: "offline",
+              data: lastActivity,
+              device: ws.device,
+            })
+          );
+        }
+      });
     }
   });
 

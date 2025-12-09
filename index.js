@@ -99,7 +99,7 @@ function handleProducer(ws, req) {
   const ip = clientIP(req).replaceAll('"', "");
 
   ws.on("open", (e) => {
-    ws.send({ type: "init", devices: producerSocket });
+    ws.send({ type: "init", devices: producerSocket, data: lastActivity });
   });
 
   ws.on("message", (msgRaw) => {

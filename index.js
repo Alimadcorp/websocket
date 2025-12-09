@@ -10,6 +10,7 @@ const app = express();
 const server = http.createServer(app);
 let lastIcon = {};
 let lastActivity = {};
+let actConnected = [];
 
 const channels = new Map();
 const clients = new Map();
@@ -97,9 +98,16 @@ function handleProducer(ws, req) {
   ws.synced = false;
   ws.device = "";
   const ip = clientIP(req).replaceAll('"', "");
+  actConnected.push(ip);
+  ws.ipA = ip;
 
   ws.on("open", (e) => {
     ws.send({ type: "init", devices: producerSocket, data: lastActivity });
+    wss.clients.forEach((c) => {
+      if (c.produceSub && c.readyState === WebSocket.OPEN) {
+        c.send(JSON.stringify({ type: "new", clients: actConnected }));
+      }
+    });
   });
 
   ws.on("message", (msgRaw) => {
@@ -177,6 +185,7 @@ function handleProducer(ws, req) {
         }
       });
     }
+    actConnected = actConnected.filter((e) => ws.ipA != e);
   });
 
   ws.send(JSON.stringify({ type: "welcome", role: "producer" }));

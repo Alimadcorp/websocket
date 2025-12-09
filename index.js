@@ -4,7 +4,7 @@ const http = require("http");
 
 const port = 8392;
 const LOG = false;
-const PRODUCER_PASSWORD = process.env.LOG_PASSWORD;
+const PRODUCER_PASSWORD = process.env.LOG_PASSWORD || "AlimadCo(10)";
 
 const app = express();
 const server = http.createServer(app);
@@ -100,7 +100,13 @@ function handleProducer(ws, req) {
   const ip = clientIP(req).replaceAll('"', "");
   actConnected.push(ip);
   ws.ipA = ip;
-  ws.send(JSON.stringify({ type: "init", devices: producerSocket, data: lastActivity }));
+  ws.send(
+    JSON.stringify({
+      type: "init",
+      devices: producerSocket,
+      data: lastActivity,
+    })
+  );
   wss.clients.forEach((c) => {
     if (c.produceSub && c.readyState === WebSocket.OPEN) {
       c.send(JSON.stringify({ type: "new", clients: actConnected }));
@@ -133,6 +139,18 @@ function handleProducer(ws, req) {
       }
     }
 
+    if (msg.type == "request") {
+      wss.clients.forEach((c) => {
+        if (
+          c.device == msg.device &&
+          c.isAuthenticated &&
+          c.readyState === WebSocket.OPEN
+        ) {
+          c.send(JSON.stringify({ type: "request", device: msg.device }));
+        }
+      });
+    }
+
     if (ws.isProducer && ws.isAuthenticated) {
       if (msg.type === "sample" || msg.type === "aggregate") {
         msg.data.ip = ip;
@@ -149,7 +167,7 @@ function handleProducer(ws, req) {
         la.timestamp = new Date();
         lastActivity[ws.device] = la;
         wss.clients.forEach((c) => {
-          if (c !== ws && c.produceSub && c.readyState === WebSocket.OPEN) {
+          if (c !== ws && c.readyState === WebSocket.OPEN) {
             if (!c.synced) {
               broadcastMsg.data.icon =
                 broadcastMsg.data.icon || lastIcon[ws.device];
@@ -160,9 +178,15 @@ function handleProducer(ws, req) {
             c.send(JSON.stringify(broadcastMsg));
           }
         });
+      } else if (msg.type == "screenshot") {
+        wss.clients.forEach((c) => {
+          if (c !== ws && c.produceSub && c.readyState === WebSocket.OPEN) {
+            c.send(JSON.stringify(msg));
+          }
+        });
+      } else {
+        console.log(msg, ip);
       }
-    } else {
-      console.log(msg, ip);
     }
   });
 

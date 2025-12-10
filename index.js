@@ -218,6 +218,11 @@ function handleProducer(ws, req) {
       });
     }
     actConnected = actConnected.filter((e) => ws.ipA != e);
+    wss.clients.forEach((c) => {
+      if (c.produceSub && c.readyState === WebSocket.OPEN) {
+        c.send(JSON.stringify({ type: "new", clients: actConnected.length }));
+      }
+    });
   });
 
   ws.send(JSON.stringify({ type: "welcome", role: "producer" }));

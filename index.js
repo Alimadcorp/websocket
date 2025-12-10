@@ -120,6 +120,7 @@ function handleProducer(ws, req) {
     } catch {
       return;
     }
+    console.log(msg);
     if (msg.type === "auth") {
       if (msg.password === PRODUCER_PASSWORD) {
         ws.isProducer = true;

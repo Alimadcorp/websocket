@@ -109,7 +109,7 @@ function handleProducer(ws, req) {
   );
   wss.clients.forEach((c) => {
     if (c.produceSub && c.readyState === WebSocket.OPEN) {
-      c.send(JSON.stringify({ type: "new", clients: actConnected }));
+      c.send(JSON.stringify({ type: "new", clients: actConnected.length }));
     }
   });
 

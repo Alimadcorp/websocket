@@ -126,6 +126,11 @@ function handleProducer(ws, req) {
         ws.isAuthenticated = true;
         ws.produceSub = false;
         ws.device = msg.device;
+        let i = actConnected.indexOf(ws.ipA);
+        if (i > -1) {
+          console.log(actConnected[i]);
+          actConnected.splice(i, 1);
+        }
         producerSocket.push(msg.device);
         ws.send(
           JSON.stringify({ type: "auth_ok", device: msg.device || null })

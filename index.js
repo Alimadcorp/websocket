@@ -6,13 +6,66 @@ const port = 8392;
 const LOG = false;
 const PRODUCER_PASSWORD = process.env.LOG_PASSWORD;
 const SLACK_TOKEN = process.env.SLACK_TOKEN;
-
 const app = express();
 const server = http.createServer(app);
 let lastIcon = {};
 let lastActivity = {};
 let actConnected = [];
 let actAuthed = [];
+
+function prettyDate(d) {
+  const now = new Date();
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const pad = (n) => n.toString().padStart(2, "0");
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const isSameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (isSameDay(d, now)) return `Today at ${time}`;
+
+  if (isSameDay(d, yesterday)) return `Yesterday at ${time}`;
+
+  const diffYears = now.getFullYear() !== d.getFullYear();
+
+  if (!diffYears) {
+    const diffDays = Math.floor((now - d) / 86400000);
+    if (diffDays < 7) return `${days[d.getDay()]} at ${time}`;
+    return `${months[d.getMonth()]} ${pad(d.getDate())} at ${time}`;
+  }
+
+  return `${months[d.getMonth()]} ${pad(
+    d.getDate()
+  )}, ${d.getFullYear()} at ${time}`;
+}
 
 const appMap = {
   chrome: ":chrome:",
@@ -22,6 +75,43 @@ const appMap = {
   slack: ":slack:",
   windowsterminal: ":terminal:",
 };
+
+let nextStatus = { windowName: "", status: "" };
+
+let lastRun = 0;
+
+function setStatus(dat) {
+  nextStatus = dat;
+  const now = Date.now();
+  if (now - lastRun >= 10000) {
+    lastRun = now;
+    updateSlackStatus(nextStatus.windowName, nextStatus.status);
+  }
+}
+
+async function updateSlackStatus(windowName, status) {
+  const emoji = appMap[windowName.toLowerCase()] || ":discord_online:";
+  const body = {
+    profile: {
+      status_text: status,
+      status_emoji: emoji,
+      status_expiration: Math.floor(Date.now() / 1000) + 55,
+    },
+  };
+
+  try {
+    await fetch("https://slack.com/api/users.profile.set", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SLACK_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 const channels = new Map();
 const clients = new Map();
@@ -92,17 +182,21 @@ function broadcast(fromWs, chNames, payload) {
 const wss = new WebSocket.Server({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
-  console.log(req.url);
   if (req.url === "/socket") {
-    console.log("Producer");
     wss.handleUpgrade(req, socket, head, (ws) => handleProducer(ws, req));
   } else {
-    console.log("Client");
     wss.handleUpgrade(req, socket, head, (ws) => handleClient(ws, req));
   }
 });
 
 function handleProducer(ws, req) {
+  function clientCount() {
+    let n = 0;
+    wss.clients.forEach((c) => {
+      if (!c.isAuthenticated && c.readyState === WebSocket.OPEN) n++;
+    });
+    return n;
+  }
   ws.isProducer = false;
   ws.isAuthenticated = false;
   ws.produceSub = true;
@@ -120,7 +214,12 @@ function handleProducer(ws, req) {
   );
   wss.clients.forEach((c) => {
     if (c.produceSub && c.readyState === WebSocket.OPEN) {
-      c.send(JSON.stringify({ type: "new", clients: actConnected.length - actAuthed.length }));
+      c.send(
+        JSON.stringify({
+          type: "new",
+          clients: clientCount()
+        })
+      );
     }
   });
 
@@ -131,7 +230,11 @@ function handleProducer(ws, req) {
     } catch {
       return;
     }
-    if((msg.device && msg.device != "ALIMAD-PC") || (msg.data?.device && msg.data.device != "ALIMAD-PC")) console.log(JSON.stringify(msg));
+    if (
+      (msg.device && msg.device != "ALIMAD-PC") ||
+      (msg.data?.device && msg.data.device != "ALIMAD-PC")
+    )
+      console.log(JSON.stringify(msg));
     if (msg.type === "auth") {
       if (msg.password === PRODUCER_PASSWORD) {
         ws.isProducer = true;
@@ -143,7 +246,6 @@ function handleProducer(ws, req) {
         ws.send(
           JSON.stringify({ type: "auth_ok", device: msg.device || null })
         );
-        console.log("Producer authenticated:", msg.device || "unknown");
         return;
       } else {
         ws.send(JSON.stringify({ type: "auth_failed" }));
@@ -191,7 +293,9 @@ function handleProducer(ws, req) {
         let la = broadcastMsg.data;
         la.timestamp = new Date();
         lastActivity[ws.device] = la;
-
+        if (ws.device == "ALIMAD-PC") {
+          setStatus({ windowName: msg.data.app, status: msg.data.title });
+        }
         wss.clients.forEach((c) => {
           if (c !== ws && c.readyState === WebSocket.OPEN) {
             if (!c.synced) {
@@ -213,7 +317,13 @@ function handleProducer(ws, req) {
     if (producerSocket.includes(ws.device)) {
       producerSocket = producerSocket.filter((e) => e != ws.device);
       actAuthed = actAuthed.filter((e) => ws.ipA != e);
-      console.log("Producer disconnected " + ws.device);
+      if (ws.device == "ALIMAD-PC") {
+        let la = lastActivity["ALIMAD-PC"];
+        updateSlackStatus(
+          "offline",
+          "Last seen " + prettyDate(la.timestamp) + " on " + la.title
+        );
+      }
       wss.clients.forEach((c) => {
         if (c.produceSub && c.readyState === WebSocket.OPEN) {
           c.send(
@@ -229,7 +339,12 @@ function handleProducer(ws, req) {
     actConnected = actConnected.filter((e) => ws.ipA != e);
     wss.clients.forEach((c) => {
       if (c.produceSub && c.readyState === WebSocket.OPEN) {
-        c.send(JSON.stringify({ type: "new", clients: actConnected.length - actAuthed.length }));
+        c.send(
+          JSON.stringify({
+            type: "new",
+            clients: clientCount()
+          })
+        );
       }
     });
   });

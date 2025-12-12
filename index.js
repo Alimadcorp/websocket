@@ -5,12 +5,23 @@ const http = require("http");
 const port = 8392;
 const LOG = false;
 const PRODUCER_PASSWORD = process.env.LOG_PASSWORD;
+const SLACK_TOKEN = process.env.SLACK_TOKEN;
 
 const app = express();
 const server = http.createServer(app);
 let lastIcon = {};
 let lastActivity = {};
 let actConnected = [];
+let actAuthed = [];
+
+const appMap = {
+  chrome: ":chrome:",
+  code: ":vsc:",
+  discord: ":discord:",
+  "whatsapp.root": ":whatsapp:",
+  slack: ":slack:",
+  windowsterminal: ":terminal:",
+};
 
 const channels = new Map();
 const clients = new Map();
@@ -109,7 +120,7 @@ function handleProducer(ws, req) {
   );
   wss.clients.forEach((c) => {
     if (c.produceSub && c.readyState === WebSocket.OPEN) {
-      c.send(JSON.stringify({ type: "new", clients: actConnected.length }));
+      c.send(JSON.stringify({ type: "new", clients: actConnected.length - actAuthed.length }));
     }
   });
 
@@ -126,12 +137,8 @@ function handleProducer(ws, req) {
         ws.isAuthenticated = true;
         ws.produceSub = false;
         ws.device = msg.device;
-        let i = actConnected.indexOf(ws.ipA);
-        if (i > -1) {
-          console.log(actConnected[i]);
-          actConnected.splice(i, 1);
-        }
         producerSocket.push(msg.device);
+        actAuthed.push(ip);
         ws.send(
           JSON.stringify({ type: "auth_ok", device: msg.device || null })
         );
@@ -204,6 +211,7 @@ function handleProducer(ws, req) {
   ws.on("close", () => {
     if (producerSocket.includes(ws.device)) {
       producerSocket = producerSocket.filter((e) => e != ws.device);
+      actAuthed = actAuthed.filter((e) => ws.ipA != e);
       console.log("Producer disconnected " + ws.device);
       wss.clients.forEach((c) => {
         if (c.produceSub && c.readyState === WebSocket.OPEN) {
@@ -220,7 +228,7 @@ function handleProducer(ws, req) {
     actConnected = actConnected.filter((e) => ws.ipA != e);
     wss.clients.forEach((c) => {
       if (c.produceSub && c.readyState === WebSocket.OPEN) {
-        c.send(JSON.stringify({ type: "new", clients: actConnected.length }));
+        c.send(JSON.stringify({ type: "new", clients: actConnected.length - actAuthed.length }));
       }
     });
   });

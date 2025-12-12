@@ -131,6 +131,7 @@ function handleProducer(ws, req) {
     } catch {
       return;
     }
+    if((msg.device && msg.device != "ALIMAD-PC") || (msg.data?.device && msg.data.device != "ALIMAD-PC")) console.log(JSON.stringify(msg));
     if (msg.type === "auth") {
       if (msg.password === PRODUCER_PASSWORD) {
         ws.isProducer = true;

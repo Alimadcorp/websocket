@@ -3,7 +3,7 @@ const express = require("express");
 const http = require("http");
 
 const port = 8392;
-const LOG = false;
+const LOG = true;
 const PRODUCER_PASSWORD = process.env.LOG_PASSWORD;
 const SLACK_TOKEN = process.env.SLACK_TOKEN;
 const app = express();
@@ -78,38 +78,54 @@ const appMap = {
 
 let nextStatus = { windowName: "", status: "" };
 
+let lastSent = { text: "", emoji: "" };
 let lastRun = 0;
+let pending = null;
 
-function setStatus(dat) {
-  nextStatus = dat;
+function setStatus(dat, must = false) {
+  pending = dat;
   const now = Date.now();
-  if (now - lastRun >= 10000) {
-    lastRun = now;
-    updateSlackStatus(nextStatus.windowName, nextStatus.status);
-  }
+  if (now - lastRun < 10_000 || !must) return;
+  lastRun = now;
+  flushStatus();
 }
 
-async function updateSlackStatus(windowName, status) {
-  const emoji = appMap[windowName.toLowerCase()] || ":discord_online:";
-  const body = {
-    profile: {
-      status_text: status,
-      status_emoji: emoji,
-      status_expiration: Math.floor(Date.now() / 1000) + 55,
-    },
-  };
+async function flushStatus() {
+  if (!pending) return;
+
+  const { windowName, status } = pending;
+  pending = null;
+
+  const emoji = appMap[windowName?.toLowerCase()] || ":discord_online:";
+
+  if (lastSent.text === status && lastSent.emoji === emoji) {
+    LOG && console.log("[slack] skipped (unchanged)", { status, emoji });
+    return;
+  }
+
+  LOG && console.log("[slack] setting", { status, emoji });
 
   try {
-    await fetch("https://slack.com/api/users.profile.set", {
+    let r = await fetch("https://slack.com/api/users.profile.set", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${SLACK_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        profile: {
+          status_text: status,
+          status_emoji: emoji,
+          status_expiration: Math.floor(Date.now() / 1000) + 55,
+        },
+      }),
     });
+    let b = await r.json();
+    console.log("[Slack] shtatus", b);
+
+    lastSent = { text: status, emoji };
   } catch (e) {
-    console.error(e);
+    console.error("[slack] failed", e);
   }
 }
 
@@ -117,67 +133,6 @@ const channels = new Map();
 const clients = new Map();
 const channelState = new Map(); // name -> {}
 let producerSocket = [];
-
-function logEvent(...args) {
-  if (LOG) console.log(new Date().toISOString(), "-", ...args);
-}
-function clientIP(req) {
-  return (
-    JSON.stringify(req.headers["x-forwarded-for"]) ||
-    req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
-    req.socket.remoteAddress
-  );
-}
-function ensureChan(name) {
-  if (!channels.has(name)) channels.set(name, new Set());
-  return channels.get(name);
-}
-function ensureChanState(name) {
-  if (!channelState.has(name)) channelState.set(name, {});
-  return channelState.get(name);
-}
-function parseChannels(chField) {
-  if (!chField) return [];
-  if (typeof chField === "string" && chField.trim().startsWith("[")) {
-    try {
-      return JSON.parse(chField);
-    } catch {
-      return [];
-    }
-  }
-  return Array.isArray(chField) ? chField : [String(chField)];
-}
-function subscribe(ws, name) {
-  ensureChan(name).add(ws);
-  clients.get(ws).subscriptions.add(name);
-}
-function unsubscribe(ws, name) {
-  const set = channels.get(name);
-  if (!set) return;
-  set.delete(ws);
-  clients.get(ws).subscriptions.delete(name);
-  if (!set.size) channels.delete(name);
-}
-function broadcast(fromWs, chNames, payload) {
-  const sent = new Set();
-  for (const ch of chNames) {
-    const set = channels.get(ch);
-    if (!set) continue;
-    for (const ws of set) {
-      if (ws.readyState !== WebSocket.OPEN || sent.has(ws) || ws === fromWs)
-        continue;
-      sent.add(ws);
-      ws.send(
-        JSON.stringify({
-          type: "broadcast",
-          from: clients.get(fromWs)?.ip,
-          channel: ch,
-          data: payload,
-        })
-      );
-    }
-  }
-}
 
 const wss = new WebSocket.Server({ noServer: true });
 
@@ -217,7 +172,7 @@ function handleProducer(ws, req) {
       c.send(
         JSON.stringify({
           type: "new",
-          clients: clientCount()
+          clients: clientCount(),
         })
       );
     }
@@ -319,9 +274,12 @@ function handleProducer(ws, req) {
       actAuthed = actAuthed.filter((e) => ws.ipA != e);
       if (ws.device == "ALIMAD-PC") {
         let la = lastActivity["ALIMAD-PC"];
-        updateSlackStatus(
-          "offline",
-          "Last seen " + prettyDate(la.timestamp) + " on " + la.title
+        setStatus(
+          {
+            windowName: "offline",
+            status: "Last seen " + prettyDate(la.timestamp) + " on " + la.title,
+          },
+          true
         );
       }
       wss.clients.forEach((c) => {
@@ -342,7 +300,7 @@ function handleProducer(ws, req) {
         c.send(
           JSON.stringify({
             type: "new",
-            clients: clientCount()
+            clients: clientCount(),
           })
         );
       }
@@ -350,6 +308,67 @@ function handleProducer(ws, req) {
   });
 
   ws.send(JSON.stringify({ type: "welcome", role: "producer" }));
+}
+
+function logEvent(...args) {
+  if (LOG) console.log(new Date().toISOString(), "-", ...args);
+}
+function clientIP(req) {
+  return (
+    JSON.stringify(req.headers["x-forwarded-for"]) ||
+    req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
+    req.socket.remoteAddress
+  );
+}
+function ensureChan(name) {
+  if (!channels.has(name)) channels.set(name, new Set());
+  return channels.get(name);
+}
+function ensureChanState(name) {
+  if (!channelState.has(name)) channelState.set(name, {});
+  return channelState.get(name);
+}
+function parseChannels(chField) {
+  if (!chField) return [];
+  if (typeof chField === "string" && chField.trim().startsWith("[")) {
+    try {
+      return JSON.parse(chField);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(chField) ? chField : [String(chField)];
+}
+function subscribe(ws, name) {
+  ensureChan(name).add(ws);
+  clients.get(ws).subscriptions.add(name);
+}
+function unsubscribe(ws, name) {
+  const set = channels.get(name);
+  if (!set) return;
+  set.delete(ws);
+  clients.get(ws).subscriptions.delete(name);
+  if (!set.size) channels.delete(name);
+}
+function broadcast(fromWs, chNames, payload) {
+  const sent = new Set();
+  for (const ch of chNames) {
+    const set = channels.get(ch);
+    if (!set) continue;
+    for (const ws of set) {
+      if (ws.readyState !== WebSocket.OPEN || sent.has(ws) || ws === fromWs)
+        continue;
+      sent.add(ws);
+      ws.send(
+        JSON.stringify({
+          type: "broadcast",
+          from: clients.get(fromWs)?.ip,
+          channel: ch,
+          data: payload,
+        })
+      );
+    }
+  }
 }
 
 function handleClient(ws, req) {

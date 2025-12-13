@@ -108,7 +108,7 @@ async function flushStatus() {
       method: "POST",
       headers: {
         Authorization: `Bearer ${SLACK_TOKEN}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
       },
       body: JSON.stringify({
         profile: {

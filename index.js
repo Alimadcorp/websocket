@@ -76,8 +76,6 @@ const appMap = {
   windowsterminal: ":terminal:",
 };
 
-let nextStatus = { windowName: "", status: "" };
-
 let lastSent = { text: "", emoji: "" };
 let lastRun = 0;
 let pending = null;
@@ -85,7 +83,7 @@ let pending = null;
 function setStatus(dat, must = false) {
   pending = dat;
   const now = Date.now();
-  if (now - lastRun < 10_000 || !must) return;
+  if (now - lastRun < 10_000 && !must) return;
   lastRun = now;
   flushStatus();
 }

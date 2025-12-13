@@ -86,7 +86,7 @@ const appMap = {
   processing: ":processing:",
   applicationframehost: ":settings:",
   javaw: ":minecraft:",
-  offline: ":discord-invisible:",
+  offline: ":offline:",
 };
 
 let lastSent = { text: "", emoji: "" };
@@ -116,7 +116,7 @@ async function flushStatus(long = false) {
   const { windowName, status } = pending;
   pending = null;
 
-  const emoji = appMap[windowName?.toLowerCase()] || ":discord-online:";
+  const emoji = appMap[windowName?.toLowerCase()] || ":online:";
   console.log(emoji, windowName?.toLowerCase());
 
   if (lastSent.text === status && lastSent.emoji === emoji) {

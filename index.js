@@ -82,7 +82,7 @@ const appMap = {
   zoom: ":zoom-new:",
   notepad: ":tw_spiral_note_pad:",
   githubdesktop: ":github:",
-  blender: ":blender:",
+  blender: ":blender-new:",
   processing: ":processing:",
   applicationframehost: ":settings:",
   javaw: ":minecraft:",

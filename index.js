@@ -97,7 +97,7 @@ function setStatus(dat, must = false) {
   const now = Date.now();
   if (now - lastRun < 10_000 && !must) return;
   lastRun = now;
-  flushStatus();
+  flushStatus(must);
 }
 
 function cleanUtf8(str) {
@@ -109,7 +109,7 @@ function cleanUtf8(str) {
     .trim();
 }
 
-async function flushStatus() {
+async function flushStatus(long = false) {
   if (!pending) return;
 
   const { windowName, status } = pending;
@@ -139,7 +139,7 @@ async function flushStatus() {
         profile: {
           status_text: safeStatus,
           status_emoji: safeEmoji,
-          status_expiration: Math.floor(Date.now() / 1000) + 55,
+          status_expiration: Math.floor(Date.now() / 1000) + long ? 600000 : 600,
         },
       }),
     });

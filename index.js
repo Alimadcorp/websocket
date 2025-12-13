@@ -85,6 +85,7 @@ const appMap = {
   blender: ":blender:",
   processing: ":processing:",
   applicationframehost: ":settings:",
+  javaw: ":minecraft:",
 };
 
 let lastSent = { text: "", emoji: "" };
@@ -114,8 +115,7 @@ async function flushStatus() {
   const { windowName, status } = pending;
   pending = null;
 
-  const emoji = appMap[windowName?.toLowerCase()] || ":discord_online:";
-  console.log(emoji);
+  const emoji = appMap[windowName?.toLowerCase()] || ":discord-online:";
 
   if (lastSent.text === status && lastSent.emoji === emoji) {
     LOG && console.log("[slack] skipped (unchanged)", { status, emoji });

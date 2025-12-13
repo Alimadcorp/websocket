@@ -74,6 +74,16 @@ const appMap = {
   "whatsapp.root": ":whatsapp:",
   slack: ":slack:",
   windowsterminal: ":terminal:",
+  explorer: ":file-explorer:",
+  searchhost: ":windows11:",
+  shellhost: ":windows11:",
+  spotify: ":spotify_logo:",
+  idman: ":idman:",
+  zoom: ":zoom-new:",
+  notepad: ":tw_spiral_note_pad:",
+  githubdesktop: ":github:",
+  blender: ":blender:",
+  processing: ":processing:",
 };
 
 let lastSent = { text: "", emoji: "" };
@@ -86,6 +96,15 @@ function setStatus(dat, must = false) {
   if (now - lastRun < 10_000 && !must) return;
   lastRun = now;
   flushStatus();
+}
+
+function cleanUtf8(str) {
+  if (!str) return "";
+  return Buffer.from(str, "utf8")
+    .toString("utf8")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function flushStatus() {
@@ -103,6 +122,9 @@ async function flushStatus() {
 
   LOG && console.log("[slack] setting", { status, emoji });
 
+  const safeStatus = cleanUtf8(status);
+  const safeEmoji = cleanUtf8(emoji);
+
   try {
     let r = await fetch("https://slack.com/api/users.profile.set", {
       method: "POST",
@@ -112,16 +134,17 @@ async function flushStatus() {
       },
       body: JSON.stringify({
         profile: {
-          status_text: status,
-          status_emoji: emoji,
+          status_text: safeStatus,
+          status_emoji: safeEmoji,
           status_expiration: Math.floor(Date.now() / 1000) + 55,
         },
       }),
     });
-    let b = await r.json();
-    console.log("[Slack] shtatus", b);
 
-    lastSent = { text: status, emoji };
+    let b = await r.json();
+    console.log("[Slack] status", b);
+
+    lastSent = { text: safeStatus, emoji: safeEmoji };
   } catch (e) {
     console.error("[slack] failed", e);
   }

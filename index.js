@@ -3,7 +3,7 @@ const express = require("express");
 const http = require("http");
 
 const port = 8392;
-const LOG = true;
+const LOG = false;
 const PRODUCER_PASSWORD = process.env.LOG_PASSWORD;
 const SLACK_TOKEN = process.env.SLACK_TOKEN;
 const app = express();
@@ -144,7 +144,7 @@ async function flushStatus() {
     });
 
     let b = await r.json();
-    console.log("[Slack] status", b);
+    LOG && console.log("[Slack] status", b);
 
     lastSent = { text: safeStatus, emoji: safeEmoji };
   } catch (e) {
@@ -212,7 +212,7 @@ function handleProducer(ws, req) {
       (msg.device && msg.device != "ALIMAD-PC") ||
       (msg.data?.device && msg.data.device != "ALIMAD-PC")
     )
-      console.log(JSON.stringify(msg));
+    console.log(JSON.stringify(msg));
     if (msg.type === "auth") {
       if (msg.password === PRODUCER_PASSWORD) {
         ws.isProducer = true;

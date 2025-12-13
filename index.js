@@ -86,6 +86,7 @@ const appMap = {
   processing: ":processing:",
   applicationframehost: ":settings:",
   javaw: ":minecraft:",
+  taskmgr: ":task-manager:",
   offline: ":offline:",
 };
 
@@ -271,7 +272,7 @@ function handleProducer(ws, req) {
         }
 
         const broadcastMsg = { type: msg.type, data: { ...msg.data } };
-        let la = broadcastMsg.data;
+        if(!(["explorer", "searchhost", "taskmgr"].includes(msg.data.app.toLowerCase()))) { let la = broadcastMsg.data; }
         la.timestamp = new Date();
         lastActivity[ws.device] = la;
         if (ws.device == "ALIMAD-PC") {

@@ -116,6 +116,7 @@ async function flushStatus() {
   pending = null;
 
   const emoji = appMap[windowName?.toLowerCase()] || ":discord-online:";
+  console.log(emoji, windowName?.toLowerCase());
 
   if (lastSent.text === status && lastSent.emoji === emoji) {
     LOG && console.log("[slack] skipped (unchanged)", { status, emoji });

@@ -86,6 +86,7 @@ const appMap = {
   processing: ":processing:",
   applicationframehost: ":settings:",
   javaw: ":minecraft:",
+  offline: ":discord-invisible:",
 };
 
 let lastSent = { text: "", emoji: "" };
@@ -127,6 +128,7 @@ async function flushStatus(long = false) {
 
   const safeStatus = cleanUtf8(status);
   const safeEmoji = cleanUtf8(emoji);
+  const now = Math.floor(Date.now() / 1000);
 
   try {
     let r = await fetch("https://slack.com/api/users.profile.set", {
@@ -139,7 +141,7 @@ async function flushStatus(long = false) {
         profile: {
           status_text: safeStatus,
           status_emoji: safeEmoji,
-          status_expiration: Math.floor(Date.now() / 1000) + long ? 600000 : 600,
+          status_expiration: long ? 0 : (now + 600),
         },
       }),
     });
@@ -213,7 +215,7 @@ function handleProducer(ws, req) {
       (msg.device && msg.device != "ALIMAD-PC") ||
       (msg.data?.device && msg.data.device != "ALIMAD-PC")
     )
-    console.log(JSON.stringify(msg));
+      console.log(JSON.stringify(msg));
     if (msg.type === "auth") {
       if (msg.password === PRODUCER_PASSWORD) {
         ws.isProducer = true;

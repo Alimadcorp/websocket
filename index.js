@@ -142,7 +142,7 @@ async function flushStatus(long = false) {
         profile: {
           status_text: safeStatus,
           status_emoji: safeEmoji,
-          status_expiration: long ? 0 : (now + 600),
+          status_expiration: long ? 0 : now + 600,
         },
       }),
     });
@@ -228,6 +228,16 @@ function handleProducer(ws, req) {
         ws.send(
           JSON.stringify({ type: "auth_ok", device: msg.device || null })
         );
+        wss.clients.forEach((c) => {
+          if (c.produceSub && c.readyState === WebSocket.OPEN) {
+            c.send(
+              JSON.stringify({
+                type: "new",
+                clients: clientCount(),
+              })
+            );
+          }
+        });
         return;
       } else {
         ws.send(JSON.stringify({ type: "auth_failed" }));
@@ -272,9 +282,15 @@ function handleProducer(ws, req) {
         }
 
         const broadcastMsg = { type: msg.type, data: { ...msg.data } };
-        if(!(["explorer", "searchhost", "taskmgr"].includes(msg.data.app.toLowerCase()))) { lastActivity[ws.device] = broadcastMsg.data; }
+        if (
+          !["explorer", "searchhost", "taskmgr"].includes(
+            msg.data.app.toLowerCase()
+          )
+        ) {
+          lastActivity[ws.device] = broadcastMsg.data;
+        }
         lastActivity[ws.device].timestamp = new Date();
-        
+
         if (ws.device == "ALIMAD-PC") {
           setStatus({ windowName: msg.data.app, status: msg.data.title });
         }

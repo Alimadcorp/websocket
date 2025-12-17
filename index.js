@@ -117,7 +117,7 @@ async function flushStatus(long = false) {
   const { windowName, status } = pending;
   pending = null;
 
-  const emoji = appMap[windowName?.toLowerCase()] || ":online:";
+  const emoji = appMap[windowName?.toLowerCase()] || ":quentem-online:";
   console.log(emoji, windowName?.toLowerCase());
 
   if (lastSent.text === status && lastSent.emoji === emoji) {

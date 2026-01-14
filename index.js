@@ -320,7 +320,7 @@ function handleProducer(ws, req) {
         setStatus(
           {
             windowName: "offline",
-            status: "Last seen " + prettyDate(la.timestamp) + " on " + la.title,
+            status: "Last seen " + (new Date(la.timestamp)).toUTCString() + " on " + la.title,
           },
           true
         );

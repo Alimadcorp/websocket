@@ -416,6 +416,16 @@ function broadcast(fromWs, chNames, payload) {
 
 function handleClient(ws, req) {
   const ip = clientIP(req);
+
+  // Enforce single connection per IP
+  for (const [oldWs, oldInfo] of clients.entries()) {
+    if (oldInfo.ip === ip) {
+      logEvent("Closing duplicate connection for IP:", ip);
+      oldWs.terminate();
+      clients.delete(oldWs);
+    }
+  }
+
   clients.set(ws, { ip, subscriptions: new Set(), isAlive: true });
   logEvent("Connected:", ip);
 
@@ -427,9 +437,9 @@ function handleClient(ws, req) {
   ws.on("message", (msgRaw) => {
     let m;
     try {
-      m = JSON.parse(msgRawRaw);
-    } catch {
-      return ws.send(JSON.stringify({ type: "error", reason: "invalid-json" }));
+      m = JSON.parse(msgRaw.toString());
+    } catch (e) {
+      return ws.send(JSON.stringify({ type: "error", reason: "invalid-json", received: msgRaw.toString() }));
     }
     const t = m.type;
 
@@ -473,21 +483,28 @@ function handleClient(ws, req) {
     if (t === "state") {
       const chs = parseChannels(m.channel);
       if (!chs.length)
-        return ws.send(JSON.stringify({ type: "error", reason: "no-channel" }));
-      const result = {};
+        return ws.send(JSON.stringify({ type: "error", reqId: m.reqId, reason: "no-channel" }));
+
+      let stateResult = null;
       for (const ch of chs) {
         const state = ensureChanState(ch);
-        if (m.action === "add")
+        if (m.action === "add") {
           Object.assign(
             state,
             typeof m.data === "object" && !Array.isArray(m.data) ? m.data : {}
           );
-        else if (m.action === "remove")
+        } else if (m.action === "remove") {
           (Array.isArray(m.data) ? m.data : []).forEach((k) => delete state[k]);
-        result[ch] = state;
+        }
+        // If single channel, return just the state. If multiple, we'll return an map.
+        if (chs.length === 1) stateResult = state;
+        else {
+          if (!stateResult) stateResult = {};
+          stateResult[ch] = state;
+        }
       }
       return ws.send(
-        JSON.stringify({ type: "state", action: m.action, result })
+        JSON.stringify({ type: "state", action: m.action, reqId: m.reqId, result: stateResult })
       );
     }
     ws.send(JSON.stringify({ type: "error", reason: "type-unknown" }));

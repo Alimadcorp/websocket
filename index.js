@@ -87,6 +87,7 @@ const appMap = {
   applicationframehost: ":settings:",
   javaw: ":minecraft:",
   taskmgr: ":task-manager:",
+  'mpc-hc64': ":movie_night:",
   offline: ":offline:",
 };
 

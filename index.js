@@ -69,6 +69,7 @@ function prettyDate(d) {
 
 const appMap = {
   chrome: ":chrome:",
+  brave: ":brave:",
   code: ":vsc:",
   discord: ":discord:",
   "whatsapp.root": ":whatsapp:",
@@ -117,6 +118,12 @@ async function flushStatus(long = false) {
 
   const { windowName, status } = pending;
   pending = null;
+
+  if (status.trim().toLowerCase().endsWith("- slack")) {
+    windowName = "slack";
+  } else if (status.trim().toLowerCase().endsWith("- discord")) {
+    windowName = "discord";
+  }
 
   const emoji = appMap[windowName?.toLowerCase()] || ":quentem-online:";
   console.log(emoji, windowName?.toLowerCase());

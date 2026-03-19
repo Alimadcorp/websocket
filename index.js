@@ -119,9 +119,9 @@ async function flushStatus(long = false) {
   const { windowName, status } = pending;
   pending = null;
 
-  if (status.trim().toLowerCase().endsWith("- slack")) {
+  if (status.trim().toLowerCase().endsWith("- slack - brave")) {
     windowName = "slack";
-  } else if (status.trim().toLowerCase().endsWith("- discord")) {
+  } else if (status.trim().toLowerCase().endsWith("- discord - brave")) {
     windowName = "discord";
   }
 

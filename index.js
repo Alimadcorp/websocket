@@ -63,7 +63,7 @@ function prettyDate(d) {
   }
 
   return `${months[d.getMonth()]} ${pad(
-    d.getDate()
+    d.getDate(),
   )}, ${d.getFullYear()} at ${time}`;
 }
 
@@ -88,7 +88,7 @@ const appMap = {
   applicationframehost: ":settings:",
   javaw: ":minecraft:",
   taskmgr: ":task-manager:",
-  'mpc-hc64': ":movie_night:",
+  "mpc-hc64": ":movie_night:",
   offline: ":offline:",
 };
 
@@ -118,11 +118,12 @@ async function flushStatus(long = false) {
 
   let { windowName, status } = pending;
   pending = null;
-
-  if (status.trim().toLowerCase().endsWith("- slack - brave")) {
-    windowName = "slack";
-  } else if (status.trim().toLowerCase().endsWith("- discord - brave")) {
-    windowName = "discord";
+  if (status) {
+    if (status.trim().toLowerCase().endsWith("- slack - brave")) {
+      windowName = "slack";
+    } else if (status.trim().toLowerCase().endsWith("- discord - brave")) {
+      windowName = "discord";
+    }
   }
 
   const emoji = appMap[windowName?.toLowerCase()] || ":quentem-online:";
@@ -200,7 +201,7 @@ function handleProducer(ws, req) {
       type: "init",
       devices: producerSocket,
       data: lastActivity,
-    })
+    }),
   );
   wss.clients.forEach((c) => {
     if (c.produceSub && c.readyState === WebSocket.OPEN) {
@@ -208,7 +209,7 @@ function handleProducer(ws, req) {
         JSON.stringify({
           type: "new",
           clients: clientCount(),
-        })
+        }),
       );
     }
   });
@@ -234,7 +235,7 @@ function handleProducer(ws, req) {
         producerSocket.push(msg.device);
         actAuthed.push(ip);
         ws.send(
-          JSON.stringify({ type: "auth_ok", device: msg.device || null })
+          JSON.stringify({ type: "auth_ok", device: msg.device || null }),
         );
         wss.clients.forEach((c) => {
           if (c.produceSub && c.readyState === WebSocket.OPEN) {
@@ -242,7 +243,7 @@ function handleProducer(ws, req) {
               JSON.stringify({
                 type: "new",
                 clients: clientCount(),
-              })
+              }),
             );
           }
         });
@@ -292,7 +293,7 @@ function handleProducer(ws, req) {
         const broadcastMsg = { type: msg.type, data: { ...msg.data } };
         if (
           !["explorer", "searchhost", "taskmgr"].includes(
-            msg.data.app.toLowerCase()
+            msg.data.app.toLowerCase(),
           )
         ) {
           lastActivity[ws.device] = broadcastMsg.data;
@@ -328,9 +329,13 @@ function handleProducer(ws, req) {
         setStatus(
           {
             windowName: "offline",
-            status: "Last seen " + (new Date(la.timestamp)).toUTCString() + " on " + la.title,
+            status:
+              "Last seen " +
+              new Date(la.timestamp).toUTCString() +
+              " on " +
+              la.title,
           },
-          true
+          true,
         );
       }
       wss.clients.forEach((c) => {
@@ -340,7 +345,7 @@ function handleProducer(ws, req) {
               type: "offline",
               data: lastActivity,
               device: ws.device,
-            })
+            }),
           );
         }
       });
@@ -352,7 +357,7 @@ function handleProducer(ws, req) {
           JSON.stringify({
             type: "new",
             clients: clientCount(),
-          })
+          }),
         );
       }
     });
@@ -416,7 +421,7 @@ function broadcast(fromWs, chNames, payload) {
           from: clients.get(fromWs)?.ip,
           channel: ch,
           data: payload,
-        })
+        }),
       );
     }
   }
@@ -447,7 +452,13 @@ function handleClient(ws, req) {
     try {
       m = JSON.parse(msgRaw.toString());
     } catch (e) {
-      return ws.send(JSON.stringify({ type: "error", reason: "invalid-json", received: msgRaw.toString() }));
+      return ws.send(
+        JSON.stringify({
+          type: "error",
+          reason: "invalid-json",
+          received: msgRaw.toString(),
+        }),
+      );
     }
     const t = m.type;
 
@@ -457,7 +468,7 @@ function handleClient(ws, req) {
           type: "pong",
           time: new Date().toISOString(),
           id: m.id,
-        })
+        }),
       );
     if (t === "connect" || t === "subscribe") {
       parseChannels(m.channel).forEach((ch) => subscribe(ws, ch));
@@ -465,7 +476,7 @@ function handleClient(ws, req) {
         JSON.stringify({
           type: "connected",
           subscribed: [...clients.get(ws).subscriptions],
-        })
+        }),
       );
     }
     if (t === "unsubscribe") {
@@ -474,7 +485,7 @@ function handleClient(ws, req) {
         JSON.stringify({
           type: "unsubscribed",
           subscribed: [...clients.get(ws).subscriptions],
-        })
+        }),
       );
     }
     if (t === "unsubscribe.all") {
@@ -491,7 +502,13 @@ function handleClient(ws, req) {
     if (t === "state") {
       const chs = parseChannels(m.channel);
       if (!chs.length)
-        return ws.send(JSON.stringify({ type: "error", reqId: m.reqId, reason: "no-channel" }));
+        return ws.send(
+          JSON.stringify({
+            type: "error",
+            reqId: m.reqId,
+            reason: "no-channel",
+          }),
+        );
 
       let stateResult = null;
       for (const ch of chs) {
@@ -499,7 +516,7 @@ function handleClient(ws, req) {
         if (m.action === "add") {
           Object.assign(
             state,
-            typeof m.data === "object" && !Array.isArray(m.data) ? m.data : {}
+            typeof m.data === "object" && !Array.isArray(m.data) ? m.data : {},
           );
         } else if (m.action === "remove") {
           (Array.isArray(m.data) ? m.data : []).forEach((k) => delete state[k]);
@@ -512,7 +529,12 @@ function handleClient(ws, req) {
         }
       }
       return ws.send(
-        JSON.stringify({ type: "state", action: m.action, reqId: m.reqId, result: stateResult })
+        JSON.stringify({
+          type: "state",
+          action: m.action,
+          reqId: m.reqId,
+          result: stateResult,
+        }),
       );
     }
     ws.send(JSON.stringify({ type: "error", reason: "type-unknown" }));
@@ -545,5 +567,5 @@ const interval = setInterval(() => {
 }, 30000);
 
 server.listen(port, () =>
-  console.log("HTTP/WebSocket server listening on " + port)
+  console.log("HTTP/WebSocket server listening on " + port),
 );

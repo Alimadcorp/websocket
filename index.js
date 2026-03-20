@@ -116,7 +116,7 @@ function cleanUtf8(str) {
 async function flushStatus(long = false) {
   if (!pending) return;
 
-  const { windowName, status } = pending;
+  let { windowName, status } = pending;
   pending = null;
 
   if (status.trim().toLowerCase().endsWith("- slack - brave")) {
